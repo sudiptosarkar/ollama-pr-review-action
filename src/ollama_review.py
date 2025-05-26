@@ -2,6 +2,7 @@ import requests
 import os
 import json
 import time
+import jwt
 from review import CodeReviewResponse, generate_review_response
 
 system_prompt = """
@@ -13,11 +14,11 @@ The review should help them identify risks and potential issues before integrati
 Knowledge/Information: You are provided with a list of filenames and partial file contents. 
 You may not have full context of the entire codebase, and libraries or techniques you are unfamiliar with should only be commented on if you are certain of a problem.
 Task/Goal: Your objective is to evaluate the changed code and assign a risk score from 1 to 5, where 1 represents minimal risk and 5 indicates changes that are likely to break functionality or compromise safety. 
-Your review must focus solely on the negative aspects of the changes, highlighting potential bugs, readability issues, performance problems, and any breaches of SOLID principles. 
+(Your review must focus solely on the negative aspects of the changes:1.34), highlighting potential bugs, readability issues, performance problems, and any breaches of SOLID principles. 
 Immediately flag any plain-text API keys or secrets as the highest risk.
 Policy/Rule: 
 1. Only review lines that have been changed (prefixed with '+' or '-'). Ignore context lines.
-2. Do not include filenames or the risk score in your detailed feedback.
+2. (Do not include filenames:1.5) or the risk score in your detailed feedback.
 3. If multiple similar issues are present, only address the most critical one.
 4. Provide brief code snippet examples in your feedback using the same programming language as the file under review. For instance, if suggesting a change, use escaped code blocks like: \\`\\`\\`typescript\\n// improved code here\\n\\`\\`\\`.\\n
 5. Do not offer praise or compliments; focus strictly on areas of improvement.
@@ -153,7 +154,7 @@ def request_code_review(api_url, github_token, owner, repo, pr_number, model, cu
         prepare_model(api_url, model)
         
         headers = {
-            'Authorization': f'token {github_token}',
+            'Authorization': f'Token {github_token}',
             'Accept': 'application/vnd.github.v3+json'
         }
 
@@ -207,10 +208,39 @@ def request_code_review(api_url, github_token, owner, repo, pr_number, model, cu
         # Cleanup review model
         cleanup_model(api_url, model)
 
+def generate_token_from_app_private_key(github_app_client_id, github_app_private_key, github_app_installation_id):
+    payload = {
+        # Issued at time
+        "iat": int(time.time()),
+        # JWT expiration time (10 minutes maximum)
+        "exp": int(time.time()) + 600,
+        # GitHub App's client ID
+        "iss": github_app_client_id,
+    }
+
+    # Create JWT
+    jwt_token = jwt.encode(payload=payload, key=github_app_private_key, algorithm="RS256")
+
+    headers = {
+        "Authorization": f"Bearer {jwt_token}",
+        "Accept": "application/vnd.github+json",
+    }
+
+    response = requests.post(
+        f"https://api.github.com/app/installations/{github_app_installation_id}/access_tokens",
+        headers=headers,
+    )
+    response.raise_for_status()
+    print(f'Received token: {response.json()}')
+    return response.json()['token']
+
 if __name__ == "__main__":
     # Get input arguments from environment variables
     api_url = os.getenv('OLLAMA_API_URL')
-    github_token = os.getenv('MY_GITHUB_TOKEN')
+    github_token = os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN')
+    github_app_private_key = os.getenv('GITHUB_APP_PRIVATE_KEY')
+    github_app_client_id = os.getenv('GITHUB_APP_CLIENT_ID')
+    github_app_installation_id = os.getenv('GITHUB_APP_INSTALLATION_ID')
     owner = os.getenv('OWNER')
     repo = os.getenv('REPO')
     pr_number = os.getenv('PR_NUMBER')
@@ -221,6 +251,9 @@ if __name__ == "__main__":
 
     print(f"API URL: {api_url}")
     print(f"GitHub Token: {github_token}")
+    print(f"Github App Private Key: {github_app_private_key}")
+    print(f"Github App Client ID: {github_app_client_id}")
+    print(f"Github App Installation ID: {github_app_installation_id}")
     print(f"Owner: {owner}")
     print(f"Repo: {repo}")
     print(f"PR Number: {pr_number}")
@@ -228,6 +261,9 @@ if __name__ == "__main__":
     print(f"Response Language: {response_language}")
     print(f"Model: {model}")
     print(f"Translation Model: {translation_model}")
+
+    if (github_app_private_key and github_app_client_id):
+        github_token = generate_token_from_app_private_key(github_app_client_id=github_app_client_id, github_app_private_key=github_app_private_key, github_app_installation_id=github_app_installation_id)
     
     try:
         # Get review from Ollama
