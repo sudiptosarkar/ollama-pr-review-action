@@ -57,7 +57,7 @@ This action requires significant computational resources due to the large model 
 
 ## Usage
 
-### Single GPU Server Setup (Recommended)
+### Single GPU Server Setup (Recommended) with Personal Access Token
 
 This example assumes you have a dedicated server with sufficient GPU capacity (48GB+ VRAM) running both the GitHub Action and Ollama server:
 
@@ -80,7 +80,41 @@ jobs:
       uses: ./
       with:
         OLLAMA_API_URL: 'http://localhost:11434' # Local Ollama server
-        MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        OWNER: ${{ github.repository_owner }}
+        REPO: ${{ github.event.repository.name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        RESPONSE_LANGUAGE: 'Korean'
+        MODEL: 'qwen2.5-coder:32b'
+        TRANSLATION_MODEL: 'exaone3.5:32b'
+```
+
+### Github App based 
+
+This example assumes you have a dedicated server with sufficient GPU capacity (48GB+ VRAM) running both the GitHub Action and Ollama server:
+
+```yaml
+name: Ollama Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  request-review:
+    runs-on: AWS-GPU # Assumes your GPU server is configured as a self-hosted runner
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Run Ollama Code Review
+      uses: ./
+      with:
+        OLLAMA_API_URL: 'http://localhost:11434' # Local Ollama server
+        GITHUB_APP_PRIVATE_KEY: ${{ secrets.OLLAMA_REVIEW_APP_PRIVATE_KEY }}
+        GITHUB_APP_CLIENT_ID: ${{ secrets.OLLAMA_REVIEW_APP_CLIENT_ID }}
+        GITHUB_APP_INSTALLATION_ID: ${{ secrets.OLLAMA_REVIEW_APP_INSTALLATION_ID }}
         OWNER: ${{ github.repository_owner }}
         REPO: ${{ github.event.repository.name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -118,7 +152,7 @@ jobs:
       uses: ./
       with:
         OLLAMA_API_URL: ${{ secrets.OLLAMA_API_URL }} # URL to your GPU server
-        MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+        GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         OWNER: ${{ github.repository_owner }}
         REPO: ${{ github.event.repository.name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -138,7 +172,11 @@ jobs:
 ### Required Settings
 
 - `OLLAMA_API_URL`: URL of your Ollama API server
-- `MY_GITHUB_TOKEN`: GitHub token with permissions to comment on PRs
+- Either (user's Personal Access Token) or (a Github App Client ID and Private Key)
+  - `GITHUB_PERSONAL_ACCESS_TOKEN`: GitHub Personal Access token with permissions to comment on PRs - Not required if GITHUB_APP_PRIVATE_KEY and GITHUB_APP_CLIENT_ID are passed
+  - `GITHUB_APP_PRIVATE_KEY`: The Github App private key. - Not required if PAT is passed in GITHUB_PERSONAL_ACCESS_TOKEN
+  - `GITHUB_APP_CLIENT_ID`: The Github App client ID. - Not required if PAT is passed in GITHUB_PERSONAL_ACCESS_TOKEN
+  - `GITHUB_APP_INSTALLATION_ID`: The Gihub App installation ID.  - Not required if PAT is passed in GITHUB_PERSONAL_ACCESS_TOKEN
 - `OWNER`: Repository owner
 - `REPO`: Repository name
 - `PR_NUMBER`: Pull request number

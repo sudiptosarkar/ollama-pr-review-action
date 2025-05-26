@@ -1,2 +1,4 @@
 requests>=2.31.0
 pydantic>=2.10.6
+pyjwt>=2.10.1
+cryptography>=3.4.8
